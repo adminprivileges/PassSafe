@@ -1,13 +1,18 @@
 #Open Source Password management software written by Thaddeus Koeing
 import tkinter as tk
 import time, sqlite3, os
+import base64
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.fernet import Fernet
 
 #Parent clas, initializing the application
 class PassSafe(tk.Tk): 
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
-        #Creating DB file if it doesnt exist
-        self.create_db()
+        #Creating Authentication/Credentials DB files if they dont exist
+        self.create_db("auth")
+        self.create_db("passsafe")
         #Creating the tkinter basic container
         self.title('PassSafe - Password Manager')
         container = tk.Frame(self)
@@ -24,10 +29,10 @@ class PassSafe(tk.Tk):
             frame.grid(row=0, column=0, sticky="nsew")
         self.show_frame(StartPage) #Always start on homepage
     #Create the DB if it doesnt exist
-    def create_db(self):
+    def create_db(self, db_name):
         self.conn = None
         try:
-            self.conn = sqlite3.connect('/home/th/code/python/passsafe/passsafe.db')
+            self.conn = sqlite3.connect(f"/home/th/code/python/passsafe/{db_name}.db")
         except sqlite3.Error as e:
             print(e)
         finally:
@@ -51,6 +56,28 @@ class PassSafe(tk.Tk):
     def mainmenu_edits(self, username):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
 
+class Crypto():
+    #TODO: add scypt key
+    def new_key(self, password):
+        password_provided = password  # This is input in the form of a string
+        password = password_provided.encode()  # Convert to type bytes
+        salt = b'salt_'  # CHANGE THIS - recommend using a key from os.urandom(16), must be of type bytes
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=128,
+            salt=salt,
+            iterations=100000,
+            )
+        self.key = base64.urlsafe_b64encode(kdf.derive(password))  # Can only use kdf once
+    def encrypt(self, key, message):
+        f = Fernet(key)
+        encrypted = f.encrypt(message)  # Encrypt the bytes. The returning object is of type bytes
+        return encrypted
+    def decrypt(self, key, encrypted):
+        f = Fernet(key)
+        decrypted = f.decrypt(encrypted)  # Decrypt the bytes. The returning object is of type bytes
+        decrypted = str(decrypted)[2:-1]  # Strip b''
+        
 
 #Passsafe Login Class
 class StartPage(tk.Frame):
@@ -147,3 +174,4 @@ app.mainloop()
 
 #https://www.youtube.com/watch?v=YXPyB4XeYLA&t=14975s
 #https://github.com/flatplanet/Intro-To-TKinter-Youtube-Course/blob/master/database2.py
+#https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/
