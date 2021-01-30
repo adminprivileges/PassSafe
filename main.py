@@ -4,6 +4,7 @@ import time, sqlite3, os
 import base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.fernet import Fernet
 
 #Parent clas, initializing the application
@@ -23,7 +24,7 @@ class PassSafe(tk.Tk):
         self.frames = {}
         #Creating the tkinter frame for each app, might change with lines 34-38
         #TODO: Change with lines 35-39 because i think this is causing conflict with the image 
-        for F in (StartPage, MainMenu, ViewPass, EditPass):
+        for F in (StartPage, CreateUser, MainMenu, ViewPass, EditPass):
             frame = F(container, self)
             self.frames[F] = frame
             frame.grid(row=0, column=0, sticky="nsew")
@@ -57,18 +58,31 @@ class PassSafe(tk.Tk):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
 
 class Crypto():
-    #TODO: add scypt key
+    #TODO: add scrypt
     def new_key(self, password):
-        password_provided = password  # This is input in the form of a string
+        password_provided = "password"  # This is input in the form of a string
         password = password_provided.encode()  # Convert to type bytes
-        salt = b'salt_'  # CHANGE THIS - recommend using a key from os.urandom(16), must be of type bytes
-        kdf = PBKDF2HMAC(
+        salt1 = os.urandom(16)  #variable type must be bytes
+        salt2 = os.urandom(16)  #variable type must be bytes
+        #initializng pkdf hash
+        pbkdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
-            length=128,
-            salt=salt,
+            length=32,
+            salt=salt1,
             iterations=100000,
-            )
-        self.key = base64.urlsafe_b64encode(kdf.derive(password))  # Can only use kdf once
+        )
+        #inializing scrypt hash
+        scrypt = Scrypt(
+            salt=salt2,
+            length=128,
+            n=2**14,
+            r=8,
+            p=1,
+        )
+        #key used to encrypt/decrypt the db cred values
+        self.pbkdf2_key = base64.urlsafe_b64encode(pbkdf.derive(password))  # Can only use kdf once
+        #key used to authenticate the user
+        self.scrypt_key = base64.urlsafe_b64encode(scrypt.derive(password))  # Can only use kdf once
     def encrypt(self, key, message):
         f = Fernet(key)
         encrypted = f.encrypt(message)  # Encrypt the bytes. The returning object is of type bytes
@@ -90,14 +104,17 @@ class StartPage(tk.Frame):
         startpage_frame = tk.Frame(self, bg='#80c1ff', bd=5)
         startpage_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')  
         self.username = tk.Entry(startpage_frame, font=40)
-        self.username.place(relwidth=0.40, relheight=1)
+        self.username.place(relwidth=0.30, relheight=1)
         self.username.insert(0, 'Username') #Makes the window say username
         self.password = tk.Entry(startpage_frame, font=40)
-        self.password.place(relwidth=0.40, relx= 0.41,relheight=1)
+        self.password.place(relwidth=0.30, relx= 0.31,relheight=1)
         self.password.insert(0, 'Password')#Makes the window say password
         #Login button, has function has to be called anonymously or it wont work
         startpage_button = tk.Button(startpage_frame, text="Login", font=40, command=lambda: controller.login_funct(self.username.get(), self.password.get(), self.startpage_label))
-        startpage_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        startpage_button.place(relx=0.62, relheight=1, relwidth=0.18)
+        #Create User 
+        startpage_create_button = tk.Button(startpage_frame, text="Create User", font=40, command=lambda: controller.show_frame(CreateUser))
+        startpage_create_button.place(relx=0.82, relheight=1, relwidth=0.18)
         #Creating a lowerframe to fill and work with 
         startpage_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
         startpage_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.6, anchor='n')
@@ -108,7 +125,47 @@ class StartPage(tk.Frame):
         background_image = background_image.subsample(2, 2)
         background_image_label = tk.Label(startpage_lower_frame, image=background_image) 
         background_image_label.place(rely=.2, relwidth=1, relheight=.8)
-    
+
+
+class CreateUser(tk.Frame):
+    def __init__(self, parent, controller):
+        tk.Frame.__init__(self,parent)
+        #Dictates the actual size of the window
+        createuser_canvas = tk.Canvas(self, height=700, width=800)
+        createuser_canvas.pack()
+        #Blue border, top of the window
+        createuser_frame = tk.Frame(self, bg='#80c1ff', bd=5)
+        createuser_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
+        createuser_label = tk.Label(createuser_frame, font=40, text="To Create a User Enter Your User Information Here and Click Submit")
+        createuser_label.place(relwidth=.80,relheight=1)
+        createuser_return_button = tk.Button(createuser_frame, text='Back', command=lambda: controller.show_frame(StartPage))
+        createuser_return_button.place(relx=.82, relwidth=.18,relheight=1)
+        #Creating a lowerframe to fill and work with 
+        createuser_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
+        createuser_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.6, anchor='n')
+        #User input Objects
+        #Username
+        createuser_username_label = tk.Label(createuser_lower_frame, text='Username')
+        createuser_username_label.grid(row=0, column=0)
+        createuser_username_enrty = tk.Entry(createuser_lower_frame, font=40) 
+        createuser_username_enrty.grid(row=0, column=1)
+        #Password
+        createuser_password_label = tk.Label(createuser_lower_frame, text='Password (must be at least 16 Characters)')
+        createuser_password_label.grid(row=1, column=0)
+        createuser_password_enrty = tk.Entry(createuser_lower_frame, font=40, show="*") 
+        createuser_password_enrty.grid(row=1, column=1)
+        #Password Verification
+        createuser_password_verify_label = tk.Label(createuser_lower_frame, text='Verify Password')
+        createuser_password_verify_label.grid(row=2, column=0)
+        createuser_password_verify_enrty = tk.Entry(createuser_lower_frame, font=40, show="*") 
+        createuser_password_verify_enrty.grid(row=2, column=1)
+        #Submit Button
+        createuser_submit_button = tk.Button(createuser_lower_frame, text='Submit', command=lambda: controller.create_user(createuser_username_enrty.get(), createuser_password_enrty.get()))
+        createuser_submit_button.grid(row=3, columnspan=2)
+
+        
+
+
 class MainMenu(tk.Frame):
  def __init__(self, parent, controller):
         tk.Frame.__init__(self,parent)
@@ -175,3 +232,4 @@ app.mainloop()
 #https://www.youtube.com/watch?v=YXPyB4XeYLA&t=14975s
 #https://github.com/flatplanet/Intro-To-TKinter-Youtube-Course/blob/master/database2.py
 #https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/
+#TODO: Create "Create user button", add database logic
