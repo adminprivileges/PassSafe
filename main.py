@@ -11,8 +11,7 @@ from cryptography.fernet import Fernet
 class PassSafe(tk.Tk): 
     def __init__(self, *args, **kwargs):
         tk.Tk.__init__(self, *args, **kwargs)
-        #Creating Authentication/Credentials DB files if they dont exist
-        self.create_db("auth")
+        #Creating  DB files if it doesnt exist
         self.create_db("passsafe")
         #Creating the tkinter basic container
         self.title('PassSafe - Password Manager')
@@ -39,6 +38,17 @@ class PassSafe(tk.Tk):
         finally:
             if self.conn:
                 self.conn.close()
+    #Create table in passsafe db
+    def create_table(self, conn, table_logic):
+        try:
+            c = conn.cursor()
+            c.execute(table_logic)
+        except sqlite3.Error as e:
+            print(e)
+        finally:
+            if conn:
+                conn.close()
+
 
     #Necessary function to switch frames using buttons later
     def show_frame(self, cont):
@@ -47,6 +57,10 @@ class PassSafe(tk.Tk):
     #Authenticaton function
     #TODO: hash password entry, match against password, then ass showframe function to loginbutton 
     def login_funct(self, username, password, label):
+        #login_conn = sqlite3.connect(f"/home/th/code/python/passsafe/passsafe.db")
+        #logg = login_conn.cursor()
+        #logg.execute()
+        #key = self.create_pkdf(password)[0]
         if username == "Thaddeus" and password == "Koenig":
             label['text']= 'Access Granted'
             self.mainmenu_edits(username)
@@ -56,33 +70,70 @@ class PassSafe(tk.Tk):
     #Long story short tkinter loads all pages at boot, so any user interaction needs to be done after the fact, the other classes are for style not function
     def mainmenu_edits(self, username):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
+    #Create a User then store their credentials in the auth db, and make them a table in passsafe db
+    def create_user(self, username, password, label):
+        self.password = password
+        #TODO: Make Table in Cred Database
+        auth_conn = sqlite3.connect(f"/home/th/code/python/passsafe/passsafe.db")
+        auth = auth_conn.cursor()
+        #Queries the database to see if the user already has a table
+        auth.execute(f" SELECT count(name) FROM sqlite_master WHERE type='table' AND name=\'{{username}}\' ")
+        if auth.fetchone()[0]==1 :
+            label['text'] = "This user already exists"
+        #Check if pw meets length requirements
+        elif len(self.password) < 16:
+            label['text'] = "Password must be at least 16 characters"
+        #Populates table in Authdb
+        else:
+            hash, salt2= Crypto.create_scrypt(self.password) 
+            salt1 = Crypto.create_pkdf(self.password)[1]
+            #TODO: Call the new_key fuction and get the values to populate db, then do it
+            self.create_table(auth_conn,f"""
+            CREATE TABLE IF NOT EXISTS {username} (
+            name text PRIMARY KEY,
+            hash text NOT NULL,
+            salt1 text NOT NULL,
+            salt2 text NOT NULL          
+            """)
+            auth.execute(f''' INSERT INTO {username}(name,hash,salt1,salt2)
+              VALUES({username},{hash},{salt1},{salt2}) ''')
+            auth_conn.close()
 
 class Crypto():
-    #TODO: add scrypt
-    def new_key(self, password):
-        password_provided = "password"  # This is input in the form of a string
-        password = password_provided.encode()  # Convert to type bytes
-        salt1 = os.urandom(16)  #variable type must be bytes
-        salt2 = os.urandom(16)  #variable type must be bytes
-        #initializng pkdf hash
-        pbkdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt1,
-            iterations=100000,
-        )
+    def create_scrypt(self, password, salt2="none"):
+        if salt2 == "none":
+            self.salt2 = os.urandom(16)  #variable type must be bytes
+        else:
+            #Insert DB logic to pull user salt
+            pass
+        password = password.encode()  # Convert to type bytes
         #inializing scrypt hash
         scrypt = Scrypt(
-            salt=salt2,
+            salt=self.salt2,
             length=128,
             n=2**14,
             r=8,
             p=1,
         )
-        #key used to encrypt/decrypt the db cred values
-        self.pbkdf2_key = base64.urlsafe_b64encode(pbkdf.derive(password))  # Can only use kdf once
         #key used to authenticate the user
         self.scrypt_key = base64.urlsafe_b64encode(scrypt.derive(password))  # Can only use kdf once
+        return self.scrypt_key, self.salt2
+    def create_pkdf(self, password, salt1=""):
+        if salt1 == "none":
+            self.salt1 = os.urandom(16)  #variable type must be bytes
+        else:
+            #Insert DB logic to pull user salt
+            pass
+        pbkdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=self.salt1,
+        iterations=100000,
+        )
+        password = password.encode()  # Convert to type bytes
+        #key used to encrypt/decrypt the db cred values
+        self.pbkdf2_key = base64.urlsafe_b64encode(pbkdf.derive(password))  # Can only use kdf once
+        return self.pbkdf2_key, self.salt1
     def encrypt(self, key, message):
         f = Fernet(key)
         encrypted = f.encrypt(message)  # Encrypt the bytes. The returning object is of type bytes
@@ -136,7 +187,7 @@ class CreateUser(tk.Frame):
         #Blue border, top of the window
         createuser_frame = tk.Frame(self, bg='#80c1ff', bd=5)
         createuser_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
-        createuser_label = tk.Label(createuser_frame, font=40, text="To Create a User Enter Your User Information Here and Click Submit")
+        createuser_label = tk.Label(createuser_frame, font=20, text="Enter Your User Information Here and Click Submit")
         createuser_label.place(relwidth=.80,relheight=1)
         createuser_return_button = tk.Button(createuser_frame, text='Back', command=lambda: controller.show_frame(StartPage))
         createuser_return_button.place(relx=.82, relwidth=.18,relheight=1)
@@ -146,22 +197,22 @@ class CreateUser(tk.Frame):
         #User input Objects
         #Username
         createuser_username_label = tk.Label(createuser_lower_frame, text='Username')
-        createuser_username_label.grid(row=0, column=0)
+        createuser_username_label.place(relwidth=.48, relheight=.20)
         createuser_username_enrty = tk.Entry(createuser_lower_frame, font=40) 
-        createuser_username_enrty.grid(row=0, column=1)
+        createuser_username_enrty.place(relx= .5, relwidth=.5, relheight=.20)
         #Password
         createuser_password_label = tk.Label(createuser_lower_frame, text='Password (must be at least 16 Characters)')
-        createuser_password_label.grid(row=1, column=0)
+        createuser_password_label.place(rely=.25, relwidth=.48, relheight=.20)
         createuser_password_enrty = tk.Entry(createuser_lower_frame, font=40, show="*") 
-        createuser_password_enrty.grid(row=1, column=1)
+        createuser_password_enrty.place(rely=.25,relx=.5 , relwidth=.5, relheight=.20)
         #Password Verification
         createuser_password_verify_label = tk.Label(createuser_lower_frame, text='Verify Password')
-        createuser_password_verify_label.grid(row=2, column=0)
+        createuser_password_verify_label.place(rely=.50, relwidth=.48, relheight=.20)
         createuser_password_verify_enrty = tk.Entry(createuser_lower_frame, font=40, show="*") 
-        createuser_password_verify_enrty.grid(row=2, column=1)
+        createuser_password_verify_enrty.place(rely=.50,relx=.5 , relwidth=.5, relheight=.20)
         #Submit Button
-        createuser_submit_button = tk.Button(createuser_lower_frame, text='Submit', command=lambda: controller.create_user(createuser_username_enrty.get(), createuser_password_enrty.get()))
-        createuser_submit_button.grid(row=3, columnspan=2)
+        createuser_submit_button = tk.Button(createuser_lower_frame, text='Submit', command=lambda: controller.create_user(createuser_username_enrty.get(), createuser_password_enrty.get(), createuser_label))
+        createuser_submit_button.place(rely=.75, relwidth=.48, relheight=.20)
 
         
 
