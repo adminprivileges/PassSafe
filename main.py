@@ -1,6 +1,6 @@
 #Open Source Password management software written by Thaddeus Koeing
 import tkinter as tk
-import time, sqlite3, os
+import time, sqlite3, os, string, random
 import base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -33,23 +33,19 @@ class PassSafe(tk.Tk):
         self.conn = None
         try:
             self.conn = sqlite3.connect(f"/home/th/code/python/passsafe/{db_name}.db")
+            cursor = self.conn.cursor()         
+            authentication_table_create = f"""CREATE TABLE authentication(
+            name text PRIMARY KEY,
+            hash blob NOT NULL,
+            salt1 blob NOT NULL,
+            salt2 blob NOT NULL          
+            )"""
+            cursor.execute(authentication_table_create)
         except sqlite3.Error as e:
             print(e)
         finally:
             if self.conn:
                 self.conn.close()
-    #Create table in passsafe db
-    def create_table(self, conn, table_logic):
-        try:
-            c = conn.cursor()
-            c.execute(table_logic)
-        except sqlite3.Error as e:
-            print(e)
-        finally:
-            if conn:
-                conn.close()
-
-
     #Necessary function to switch frames using buttons later
     def show_frame(self, cont):
         frame = self.frames[cont]
@@ -57,11 +53,17 @@ class PassSafe(tk.Tk):
     #Authenticaton function
     #TODO: hash password entry, match against password, then ass showframe function to loginbutton 
     def login_funct(self, username, password, label):
-        #login_conn = sqlite3.connect(f"/home/th/code/python/passsafe/passsafe.db")
-        #logg = login_conn.cursor()
-        #logg.execute()
-        #key = self.create_pkdf(password)[0]
-        if username == "Thaddeus" and password == "Koenig":
+        login_conn = sqlite3.connect(f"/home/th/code/python/passsafe/passsafe.db")
+        logg = login_conn.cursor()
+        logg_logic= f'''SELECT hash, salt2 FROM authentication WHERE name = \"{username}\"'''
+        key_1 = logg.execute(logg_logic)
+        key_1 = logg.fetchone()
+        salt2 = key_1[1]
+        salt2 = bytes(salt2, 'utf-8')
+        print(f" the salt {salt2} is type {type(salt2)}")
+        key = self.create_scrypt(password, salt2)[0]
+        print(f"Key = {key}, key1 = {key_1[0]} ")
+        if str(key) == str(key_1[0]):
             label['text']= 'Access Granted'
             self.mainmenu_edits(username)
             self.show_frame(MainMenu)
@@ -77,32 +79,38 @@ class PassSafe(tk.Tk):
         auth_conn = sqlite3.connect(f"/home/th/code/python/passsafe/passsafe.db")
         auth = auth_conn.cursor()
         #Queries the database to see if the user already has a table
+        #TODO: Since im using an auth database i need to change this to not query for a table with that name but query the authdb for the name in the primary key field
         auth.execute(f" SELECT count(name) FROM sqlite_master WHERE type='table' AND name=\'{{username}}\' ")
         if auth.fetchone()[0]==1 :
             label['text'] = "This user already exists"
         #Check if pw meets length requirements
-        elif len(self.password) < 16:
+        elif len(self.password) < 16: 
             label['text'] = "Password must be at least 16 characters"
         #Populates table in Authdb
         else:
-            hash, salt2= Crypto.create_scrypt(self.password) 
-            salt1 = Crypto.create_pkdf(self.password)[1]
-            #TODO: Call the new_key fuction and get the values to populate db, then do it
-            self.create_table(auth_conn,f"""
-            CREATE TABLE IF NOT EXISTS {username} (
-            name text PRIMARY KEY,
-            hash text NOT NULL,
-            salt1 text NOT NULL,
-            salt2 text NOT NULL          
-            """)
-            auth.execute(f''' INSERT INTO {username}(name,hash,salt1,salt2)
-              VALUES({username},{hash},{salt1},{salt2}) ''')
-            auth_conn.close()
-
-class Crypto():
+            try: 
+                hash, salt2 = self.create_scrypt(self.password) 
+                salt1 = self.create_pkdf(self.password)[1]
+                salt1 = str(salt1)[2:-1]
+                salt2 = str(salt2)[2:-1]
+                #TODO: Call the new_key fuction and get the values to populate db, then do it=
+                print(f''' INSERT INTO authentication(name, hash, salt1, salt2) VALUES("{username}", "{hash}", {salt1}, {salt2}) ''')
+                auth.execute(f'INSERT INTO authentication(name, hash, salt1, salt2) VALUES("{username}", "{hash}", "{salt1}", "{salt2}")')
+                label['text'] = "User Created. Please go back to login"
+            except sqlite3.Error as e: 
+                print(e) 
+            finally: 
+                auth_conn.commit()
+                auth_conn.close()
+    #TODO: DB extra parameter for username, if username = none
     def create_scrypt(self, password, salt2="none"):
-        if salt2 == "none":
-            self.salt2 = os.urandom(16)  #variable type must be bytes
+        self.salt2 = salt2
+        print(f"The password is {password}, the salt is {self.salt2}")
+        if self.salt2 == "none": 
+            #variable type must be bytes
+            N=16
+            start_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=N))
+            self.salt2 = bytes(start_str, 'utf-8')
         else:
             #Insert DB logic to pull user salt
             pass
@@ -110,17 +118,22 @@ class Crypto():
         #inializing scrypt hash
         scrypt = Scrypt(
             salt=self.salt2,
-            length=128,
+            length=32,
             n=2**14,
             r=8,
             p=1,
-        )
+        ) 
         #key used to authenticate the user
         self.scrypt_key = base64.urlsafe_b64encode(scrypt.derive(password))  # Can only use kdf once
         return self.scrypt_key, self.salt2
-    def create_pkdf(self, password, salt1=""):
-        if salt1 == "none":
-            self.salt1 = os.urandom(16)  #variable type must be bytes
+    def create_pkdf(self, password, salt1="none"):
+        self.salt1 = salt1
+        if self.salt1 == "none":
+            #variable type must be bytes
+            N=16
+            start_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=N))
+            self.salt1 = bytes(start_str, 'utf-8')
+
         else:
             #Insert DB logic to pull user salt
             pass
