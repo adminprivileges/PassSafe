@@ -1,6 +1,7 @@
 #Open Source Password management software written by Thaddeus Koeing
 import tkinter as tk
-import time, sqlite3, os, string, random, pyodbc
+from tkinter import ttk
+import time, sqlite3, os, string, random, pyodbc, pandas, tabulate
 import base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -19,6 +20,9 @@ class PassSafe(tk.Tk):
         container.pack(side="top", fill="both", expand = True)
         container.grid_rowconfigure(0, weight=1)
         container.grid_columnconfigure(0, weight=1)
+        #Global Username variable
+        global user_auth_global
+        user_auth_global = ""
         #Empty Doct for later page identification
         self.frames = {}
         #Creating the tkinter frame for each app, might change with lines 34-38
@@ -31,13 +35,14 @@ class PassSafe(tk.Tk):
     def database_open(self, dblogic):
         self.conn = None
         try:
-            conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=#######;")
-            cursor = self.conn.cursor()         
-            cursor.execute(dblogic)
+            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
+            self.cursor = self.conn.cursor()         
+            self.cursor.execute(dblogic)
         except sqlite3.Error as e:
             print(e)
         finally:
             if self.conn:
+                self.conn.commit()
                 self.conn.close()
     '''
     #Create the DB if it doesnt exist
@@ -68,7 +73,7 @@ class PassSafe(tk.Tk):
     #Authenticaton function
     #TODO: hash password entry, match against password, then ass showframe function to loginbutton 
     def login_funct(self, username, password, label):
-        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=########;")
+        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
         logg = login_conn.cursor()
         logg_logic= f'''SELECT hash, salt2 FROM auth_user WHERE username = \'{username}\''''
         key_1 = logg.execute(logg_logic)
@@ -84,22 +89,44 @@ class PassSafe(tk.Tk):
             label['text']= 'Access Granted'
             self.mainmenu_edits(username)
             self.show_frame(MainMenu)
+            global user_auth_global
+            user_auth_global = username
+            
         else:
             label['text']= 'Username or Password Incorrect Please Try Again'
     #Long story short tkinter loads all pages at boot, so any user interaction needs to be done after the fact, the other classes are for style not function
     def mainmenu_edits(self, username):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
     def viewpass_edits(self, username):
-        viewpass_logic = f""" SELECT * from passwords WHERE username='{username}'
-        """
-        self.database_open(viewpass_logic)
-        ViewPass.viewpass_label['text'] = f""
-        
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
+        cursor = conn.cursor()
+        cursor.execute(f" SELECT label,username,password from passwords WHERE auth_username=\'{username}\'")
+        rows = cursor.fetchall()    
+        for row in rows:
+            print(row) 
+            ViewPass.tree.insert("", tk.END, values=row) 
+        #viewpass_logic = f" SELECT label,username,password from passwords WHERE auth_username=\'{username}\'"
+        #viewpass_content = cursor.execute(viewpass_logic)
+        #viewpass_content_list = list(viewpass_content)
+        #print(viewpass_content_list)
+        #df = pandas.DataFrame.from_records(viewpass_content_list, columns=['Label', 'Username', 'Password'])
+        #ViewPass.viewpass_label['text'] = f"{tabulate.tabulate(df, headers= 'keys', tablefmt='psql')}"
+        conn.close()
+    #Password DB logic
+    def addpass_sql(self, label, username, password):
+        dblogic = f"INSERT INTO passwords(label, username, password, auth_username) VALUES(\'{label}\', \'{username}\', \'{password}\', \'{user_auth_global}\')"
+        self.database_open(dblogic)
+    def modpass_sql(self, label, username, password):
+        dblogic = f"UPDATE passwords SET username=\'{username}\', password=\'{password}\' WHERE label=\'{label}\' AND auth_username=\'{user_auth_global}\'"
+        self.database_open(dblogic)
+    def delpass_sql(self, label):
+        dblogic = f"DELETE from passwords WHERE label=\'{label}\' AND auth_username=\'{user_auth_global}\'"
+        self.database_open(dblogic)
     #Create a User then store their credentials in the auth db, and make them a table in passsafe db
     def create_user(self, username, password, label):
         self.password = password
         #TODO: Make Table in Cred Database
-        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
         auth = auth_conn.cursor()
         #Queries the database to see if the user already has a table
         #TODO: Since im using an auth database i need to change this to not query for a table with that name but query the authdb for the name in the primary key field
@@ -256,9 +283,6 @@ class CreateUser(tk.Frame):
         createuser_submit_button = tk.Button(createuser_lower_frame, text='Submit', command=lambda: controller.create_user(createuser_username_enrty.get(), createuser_password_enrty.get(), createuser_label))
         createuser_submit_button.place(rely=.75, relwidth=.48, relheight=.20)
 
-        
-
-
 class MainMenu(tk.Frame):
  def __init__(self, parent, controller):
         tk.Frame.__init__(self,parent)
@@ -274,7 +298,7 @@ class MainMenu(tk.Frame):
         self.mainmenu_button.place(relx=0.82, relheight=1, relwidth=0.18)
         mainmenu_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
         mainmenu_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
-        self.mainmenu_button1 = tk.Button(mainmenu_lower_frame, text='View Passwords', command=lambda: controller.show_frame(ViewPass))
+        self.mainmenu_button1 = tk.Button(mainmenu_lower_frame, text='View Passwords', command=lambda: [controller.show_frame(ViewPass), controller.viewpass_edits(user_auth_global)])
         self.mainmenu_button1.place(relwidth=1, relheight=.45)
         self.mainmenu_button2 = tk.Button(mainmenu_lower_frame, text='Edit Passwords', command=lambda: controller.show_frame(EditPass))
         self.mainmenu_button2.place(rely=.50, relwidth=1, relheight=.45)
@@ -294,9 +318,16 @@ class ViewPass(tk.Frame):
         self.viewpass_button.place(relx=0.82, relheight=1, relwidth=0.18)
         viewpass_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
         viewpass_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
-        ViewPass.viewpass_label = tk.Label(viewpass_lower_frame, font=40)
-        ViewPass.viewpass_label.place(relwidth=1,relheight=1)
-
+        ViewPass.tree = ttk.Treeview(viewpass_lower_frame, column=("c1", "c2", "c3"), show='headings')
+        ViewPass.tree.column("#1", anchor=tk.CENTER)
+        ViewPass.tree.heading("#1", text="Label")
+        ViewPass.tree.column("#2", anchor=tk.CENTER)
+        ViewPass.tree.heading("#2", text="Username")
+        ViewPass.tree.column("#3", anchor=tk.CENTER)
+        ViewPass.tree.heading("#3", text="Password")
+        ViewPass.tree.pack()
+        #ViewPass.viewpass_label = tk.Label(viewpass_lower_frame, font=40, anchor="nw")
+        #ViewPass.viewpass_label.place(relwidth=1,relheight=1)
 
 class EditPass(tk.Frame):
  def __init__(self, parent, controller):
@@ -335,21 +366,26 @@ class AddPass(tk.Frame):
         self.addpass_button.place(relx=0.82, relheight=1, relwidth=0.18)
         addpass_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
         addpass_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
+        #Label
+        self.addpass_label_label = tk.Label(addpass_lower_frame, text ='Label')
+        self.addpass_label_label.place(relwidth=.48, relheight=.20)
+        self.addpass_label_enrty = tk.Entry(addpass_lower_frame, font=40) 
+        self.addpass_label_enrty.place(relx= .5, relwidth=.5, relheight=.20)
         #Usename
         self.addpass_username_label = tk.Label(addpass_lower_frame, text ='Username')
-        self.addpass_username_label.place(relwidth=.48, relheight=.20)
+        self.addpass_username_label.place(rely=.25, relwidth=.48, relheight=.20)
         self.addpass_username_enrty = tk.Entry(addpass_lower_frame, font=40) 
-        self.addpass_username_enrty.place(relx= .5, relwidth=.5, relheight=.20)
+        self.addpass_username_enrty.place(rely=.25,relx=.5 , relwidth=.5, relheight=.20)
         #Password
         self.addpass_password_label = tk.Label(addpass_lower_frame, text='Password')
-        self.addpass_password_label.place(rely=.25, relwidth=.48, relheight=.20)
+        self.addpass_password_label.place(rely=.50, relwidth=.48, relheight=.20)
         self.addpass_password_enrty = tk.Entry(addpass_lower_frame, font=40, show="*") 
-        self.addpass_password_enrty.place(rely=.25,relx=.5 , relwidth=.5, relheight=.20)
+        self.addpass_password_enrty.place(rely=.50,relx=.5 , relwidth=.5, relheight=.20)
         #Need a password? create function that allows user to press a button that sets off pokemon function and fill the password entry
         self.addpass_pokemon_button = tk.Button(addpass_lower_frame, text='Generate Password')
         self.addpass_pokemon_button.place(rely=.75, relwidth=.48, relheight=.20)
         #submit
-        self.addpass_pokemon_button = tk.Button(addpass_lower_frame, text='Submit')
+        self.addpass_pokemon_button = tk.Button(addpass_lower_frame, text='Submit', command=lambda: controller.addpass_sql(self.addpass_label_enrty.get(), self.addpass_username_enrty.get(), self.addpass_password_enrty.get()))
         self.addpass_pokemon_button.place(rely=.75, relx=.5, relwidth=.48, relheight=.20)
 
 class ModPass(tk.Frame):
@@ -383,7 +419,7 @@ class ModPass(tk.Frame):
         self.modpass_password_enrty = tk.Entry(modpass_lower_frame, font=40, show="*") 
         self.modpass_password_enrty.place(rely=.50,relx=.5 , relwidth=.5, relheight=.20)
         #submit
-        self.modpass_pokemon_button = tk.Button(modpass_lower_frame, text='Submit')
+        self.modpass_pokemon_button = tk.Button(modpass_lower_frame, text='Submit', command=lambda: controller.modpass_sql(self.modpass_label_enrty.get(), self.modpass_username_enrty.get(), self.modpass_password_enrty.get()))
         self.modpass_pokemon_button.place(rely=.75, relx=.5, relwidth=.48, relheight=.20)
 
 class DelPass(tk.Frame):
@@ -407,7 +443,7 @@ class DelPass(tk.Frame):
         self.delpass_label_enrty = tk.Entry(delpass_lower_frame, font=40) 
         self.delpass_label_enrty.place(relx= .5, relwidth=.5, relheight=.20)
         #submit
-        self.delpass_pokemon_button = tk.Button(delpass_lower_frame, text='Submit')
+        self.delpass_pokemon_button = tk.Button(delpass_lower_frame, text='Submit', command=lambda: controller.delpass_sql(self.delpass_label_enrty.get()))
         self.delpass_pokemon_button.place(rely=.25, relx=.5, relwidth=.48, relheight=.20)
         
         
@@ -417,4 +453,4 @@ app.mainloop()
 #https://www.youtube.com/watch?v=YXPyB4XeYLA&t=14975s
 #https://github.com/flatplanet/Intro-To-TKinter-Youtube-Course/blob/master/database2.py
 #https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/
-#TODO: Create "Create user button", add database logic
+#TODO: Pokemon/Payment Cards
