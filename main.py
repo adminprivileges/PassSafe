@@ -1,7 +1,7 @@
 #Open Source Password management software written by Thaddeus Koeing
 import tkinter as tk
 from tkinter import ttk
-import time, sqlite3, os, string, random, pyodbc, pandas, tabulate
+import time, sqlite3, os, string, random, pyodbc, random
 import base64
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -27,7 +27,7 @@ class PassSafe(tk.Tk):
         self.frames = {}
         #Creating the tkinter frame for each app, might change with lines 34-38
         #TODO: Change with lines 35-39 because i think this is causing conflict with the image 
-        for F in (StartPage, CreateUser, MainMenu, ViewPass, EditPass, AddPass, ModPass, DelPass):
+        for F in (StartPage, CreateUser, MainMenu, ViewPass, EditPass, AddPass, ModPass, DelPass, ViewCard, EditCard, AddCard, ModPass, DelCard):
             frame = F(container, self)
             self.frames[F] = frame
             frame.grid(row=0, column=0, sticky="nsew")
@@ -35,7 +35,7 @@ class PassSafe(tk.Tk):
     def database_open(self, dblogic):
         self.conn = None
         try:
-            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
+            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
             self.cursor = self.conn.cursor()         
             self.cursor.execute(dblogic)
         except sqlite3.Error as e:
@@ -73,7 +73,7 @@ class PassSafe(tk.Tk):
     #Authenticaton function
     #TODO: hash password entry, match against password, then ass showframe function to loginbutton 
     def login_funct(self, username, password, label):
-        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
+        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
         logg = login_conn.cursor()
         logg_logic= f'''SELECT hash, salt2 FROM auth_user WHERE username = \'{username}\''''
         key_1 = logg.execute(logg_logic)
@@ -98,35 +98,80 @@ class PassSafe(tk.Tk):
     def mainmenu_edits(self, username):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
     def viewpass_edits(self, username):
-        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
         cursor = conn.cursor()
         cursor.execute(f" SELECT label,username,password from passwords WHERE auth_username=\'{username}\'")
         rows = cursor.fetchall()    
         for row in rows:
             print(row) 
             ViewPass.tree.insert("", tk.END, values=row) 
-        #viewpass_logic = f" SELECT label,username,password from passwords WHERE auth_username=\'{username}\'"
-        #viewpass_content = cursor.execute(viewpass_logic)
-        #viewpass_content_list = list(viewpass_content)
-        #print(viewpass_content_list)
-        #df = pandas.DataFrame.from_records(viewpass_content_list, columns=['Label', 'Username', 'Password'])
-        #ViewPass.viewpass_label['text'] = f"{tabulate.tabulate(df, headers= 'keys', tablefmt='psql')}"
+        conn.close()
+    def viewcard_edits(self, username):
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+        cursor = conn.cursor()
+        cursor.execute(f"""
+        SELECT payment_cards.label,payment_cards.card_number,payment_cards.card_type,payment_cards.zip_code,payment_cards.sec_code,payment_cards.card_name, debit_cards.pin
+        FROM payment_cards
+        Full Outer Join debit_cards on payment_cards.label=debit_cards.debit_label AND payment_cards.auth_username = \'{user_auth_global}\'
+        """)
+        rows = cursor.fetchall()    
+        for row in rows:
+            print(row) 
+            ViewCard.tree.insert("", tk.END, values=row) 
+        conn.close()
+    def poke_generate(self, label, username):
+        conn = pyodbc.connect(
+        f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;"
+        )
+        cursor = conn.cursor() 
+        while True:
+            random_pokemon = random.randint(0,549)
+            if random_pokemon != 83: break
+        cursor.execute(f'SELECT * from pokemon where pokedex_id = \'{random_pokemon}\'')
+        pok = cursor.fetchone()
+        #chooses a ranom word from pokemon description
+        rando = random.randint(0, len(pok[3].split())-1)
+        poke_password = f'{pok[1]}-{pok[2]}-{pok[3].split()[rando]}'
+        AddPass.addpass_password_enrty.insert(0,f"{poke_password}")
+        #updates password table
+        cursor.execute(f"INSERT INTO passwords(label, username, password, auth_username) VALUES(\'{label}\', \'{username}\', \'{poke_password}\', \'{user_auth_global}\')")
+        #update populates table
+        cursor.execute(f'INSERT into populates(pokedex_id, label, auth_username, desc_idex) VALUES(\'{pok[0]}\', \'{label}\', \'{user_auth_global}\',\'{rando}\')')
+        conn.commit() #your db will be empty without this
         conn.close()
     #Password DB logic
     def addpass_sql(self, label, username, password):
         dblogic = f"INSERT INTO passwords(label, username, password, auth_username) VALUES(\'{label}\', \'{username}\', \'{password}\', \'{user_auth_global}\')"
         self.database_open(dblogic)
+    def addcard_sql(self,label,card_number,card_type,zip_code,sec_code,card_name,pin):
+        dblogic = f"INSERT INTO payment_cards(label,card_number,card_type,zip_code,sec_code,card_name,auth_username) VALUES(\'{label}\',\'{card_number}\',\'{card_type}\',\'{zip_code}\',\'{sec_code}\',\'{card_name}\',\'{user_auth_global}\')"
+        self.database_open(dblogic)
+        if card_type.lower() == "debit":
+            dblogic1 = f"INSERT into debit_cards(debit_label, debit_username, pin) VALUES(\'{label}\', \'{user_auth_global}\', \'{pin}\') "
+            self.database_open(dblogic1)
+        else:
+            pass
+    
     def modpass_sql(self, label, username, password):
         dblogic = f"UPDATE passwords SET username=\'{username}\', password=\'{password}\' WHERE label=\'{label}\' AND auth_username=\'{user_auth_global}\'"
         self.database_open(dblogic)
+    def modcard_sql(self, label,card_number,card_type,zip_code,sec_code,card_name,pin):
+        dblogic = f"UPDATE payment cards set card_number= \'{card_number}\',card_type = \'{card_type}\',zip_code = \'{zip_code}\',sec_code = \'{sec_code}\',card_name= \'{card_name}\' WHERE label = \'{label}\' AND auth_username=\'{user_auth_global}\'"
+        self.database_open(dblogic)
+        if card_type.lower() == "debit":
+            dblogic1 = f"UPDATE debit_cards set pin = \'{pin}\' WHERE debit_label = \'{label}, \' AND debit_username = \'{user_auth_global}\'" 
+            self.database_open(dblogic1)
     def delpass_sql(self, label):
         dblogic = f"DELETE from passwords WHERE label=\'{label}\' AND auth_username=\'{user_auth_global}\'"
+        self.database_open(dblogic)
+    def delcard_sql(self, label):
+        dblogic = f"DELETE from payment_cards WHERE label=\'{label}\' AND auth_username=\'{user_auth_global}\'"
         self.database_open(dblogic)
     #Create a User then store their credentials in the auth db, and make them a table in passsafe db
     def create_user(self, username, password, label):
         self.password = password
         #TODO: Make Table in Cred Database
-        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=####;")
+        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
         auth = auth_conn.cursor()
         #Queries the database to see if the user already has a table
         #TODO: Since im using an auth database i need to change this to not query for a table with that name but query the authdb for the name in the primary key field
@@ -246,7 +291,6 @@ class StartPage(tk.Frame):
         background_image_label = tk.Label(startpage_lower_frame, image=background_image) 
         background_image_label.place(rely=.2, relwidth=1, relheight=.8)
 
-
 class CreateUser(tk.Frame):
     def __init__(self, parent, controller):
         tk.Frame.__init__(self,parent)
@@ -296,12 +340,17 @@ class MainMenu(tk.Frame):
         MainMenu.mainmenu_label.place(relwidth=.80,relheight=1)
         self.mainmenu_button = tk.Button(mainmenu_frame, text="Log Out", font=40, command=lambda: controller.show_frame(StartPage))
         self.mainmenu_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        #Lower Frame
         mainmenu_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
-        mainmenu_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
+        mainmenu_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.50, anchor='n')
         self.mainmenu_button1 = tk.Button(mainmenu_lower_frame, text='View Passwords', command=lambda: [controller.show_frame(ViewPass), controller.viewpass_edits(user_auth_global)])
-        self.mainmenu_button1.place(relwidth=1, relheight=.45)
+        self.mainmenu_button1.place(relwidth=1, relheight=.20)
         self.mainmenu_button2 = tk.Button(mainmenu_lower_frame, text='Edit Passwords', command=lambda: controller.show_frame(EditPass))
-        self.mainmenu_button2.place(rely=.50, relwidth=1, relheight=.45)
+        self.mainmenu_button2.place(rely=.25, relwidth=1, relheight=.20)
+        self.mainmenu_button3 = tk.Button(mainmenu_lower_frame, text='View Cards', command=lambda: [controller.show_frame(ViewCard), controller.viewcard_edits(user_auth_global)])
+        self.mainmenu_button3.place(rely=.50, relwidth=1, relheight=.20)
+        self.mainmenu_button4 = tk.Button(mainmenu_lower_frame, text='Edit Cards', command=lambda: controller.show_frame(EditCard))
+        self.mainmenu_button4.place(rely=.75, relwidth=1, relheight=.20)
 
 class ViewPass(tk.Frame):
  def __init__(self, parent, controller):
@@ -314,7 +363,7 @@ class ViewPass(tk.Frame):
         viewpass_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
         self.viewpass_label = tk.Label(viewpass_frame, font=40, text="These are the passwords you currently have saved ")
         self.viewpass_label.place(relwidth=.80,relheight=1)
-        self.viewpass_button = tk.Button(viewpass_frame, text="Main Menu", font=40, command=lambda: controller.show_frame(MainMenu))
+        self.viewpass_button = tk.Button(viewpass_frame, text="Main Menu", font=40, command=lambda: [controller.show_frame(MainMenu), ViewPass.tree.delete(*ViewPass.tree.get_children())])
         self.viewpass_button.place(relx=0.82, relheight=1, relwidth=0.18)
         viewpass_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
         viewpass_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
@@ -338,7 +387,7 @@ class EditPass(tk.Frame):
         #Blue border, top of the window
         editpass_frame = tk.Frame(self, bg='#80c1ff', bd=5)
         editpass_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
-        self.editpass_label = tk.Label(editpass_frame, font=40, text="Would you like to Add, Modyfy or Delete Your Inventory ")
+        self.editpass_label = tk.Label(editpass_frame, font=40, text="Would you like to Add, Modify or Delete Your Inventory ")
         self.editpass_label.place(relwidth=.80,relheight=1)
         self.editpass_button = tk.Button(editpass_frame, text="Main Menu", font=40, command=lambda: controller.show_frame(MainMenu))
         self.editpass_button.place(relx=0.82, relheight=1, relwidth=0.18)
@@ -379,14 +428,14 @@ class AddPass(tk.Frame):
         #Password
         self.addpass_password_label = tk.Label(addpass_lower_frame, text='Password')
         self.addpass_password_label.place(rely=.50, relwidth=.48, relheight=.20)
-        self.addpass_password_enrty = tk.Entry(addpass_lower_frame, font=40, show="*") 
-        self.addpass_password_enrty.place(rely=.50,relx=.5 , relwidth=.5, relheight=.20)
+        AddPass.addpass_password_enrty = tk.Entry(addpass_lower_frame, font=40, show="*") 
+        AddPass.addpass_password_enrty.place(rely=.50,relx=.5 , relwidth=.5, relheight=.20)
         #Need a password? create function that allows user to press a button that sets off pokemon function and fill the password entry
-        self.addpass_pokemon_button = tk.Button(addpass_lower_frame, text='Generate Password')
+        self.addpass_pokemon_button = tk.Button(addpass_lower_frame, text='Gen Password/Submit', command= lambda: controller.poke_generate(self.addpass_label_enrty.get(), self.addpass_username_enrty.get()))
         self.addpass_pokemon_button.place(rely=.75, relwidth=.48, relheight=.20)
         #submit
-        self.addpass_pokemon_button = tk.Button(addpass_lower_frame, text='Submit', command=lambda: controller.addpass_sql(self.addpass_label_enrty.get(), self.addpass_username_enrty.get(), self.addpass_password_enrty.get()))
-        self.addpass_pokemon_button.place(rely=.75, relx=.5, relwidth=.48, relheight=.20)
+        self.addpass_submit_button = tk.Button(addpass_lower_frame, text='Submit', command=lambda: controller.addpass_sql(self.addpass_label_enrty.get(), self.addpass_username_enrty.get(), self.addpass_password_enrty.get()))
+        self.addpass_submit_button.place(rely=.75, relx=.5, relwidth=.48, relheight=.20)
 
 class ModPass(tk.Frame):
  def __init__(self, parent, controller):
@@ -445,7 +494,192 @@ class DelPass(tk.Frame):
         #submit
         self.delpass_pokemon_button = tk.Button(delpass_lower_frame, text='Submit', command=lambda: controller.delpass_sql(self.delpass_label_enrty.get()))
         self.delpass_pokemon_button.place(rely=.25, relx=.5, relwidth=.48, relheight=.20)
-        
+
+class ViewCard(tk.Frame):
+ def __init__(self, parent, controller):
+        tk.Frame.__init__(self,parent)
+        #Dictates the actual size of the window
+        viewcard_canvas = tk.Canvas(self, height=700, width=800)
+        viewcard_canvas.pack()
+        #Blue border, top of the window
+        viewcard_frame = tk.Frame(self, bg='#80c1ff', bd=5)
+        viewcard_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
+        self.viewcard_label = tk.Label(viewcard_frame, font=40, text="These are the cards you currently have saved ")
+        self.viewcard_label.place(relwidth=.80,relheight=1)
+        self.viewcard_button = tk.Button(viewcard_frame, text="Main Menu", font=40, command=lambda: [controller.show_frame(MainMenu), ViewCard.tree.delete(*ViewCard.tree.get_children())])
+        self.viewcard_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        viewcard_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
+        viewcard_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.5, anchor='n')
+        ViewCard.tree = ttk.Treeview(viewcard_lower_frame, column=("c1", "c2", "c3", "c4", "c5", "c6", "c7"), show='headings')
+        ViewCard.tree.column("#1", anchor=tk.CENTER)
+        ViewCard.tree.heading("#1", text="Label")
+        ViewCard.tree.column("#2", anchor=tk.CENTER)
+        ViewCard.tree.heading("#2", text="Card Number")
+        ViewCard.tree.column("#3", anchor=tk.CENTER)
+        ViewCard.tree.heading("#3", text="Card Type")
+        ViewCard.tree.column("#4", anchor=tk.CENTER)
+        ViewCard.tree.heading("#4", text="Zip Code")
+        ViewCard.tree.column("#5", anchor=tk.CENTER)
+        ViewCard.tree.heading("#5", text="Sec Code")
+        ViewCard.tree.column("#6", anchor=tk.CENTER)
+        ViewCard.tree.heading("#6", text="Card Name")
+        ViewCard.tree.column("#7", anchor=tk.CENTER)
+        ViewCard.tree.heading("#7", text="PIN")
+        ViewCard.tree.pack()
+        #ViewCard.viewcard_label = tk.Label(viewcard_lower_frame, font=40, anchor="nw")
+        #ViewCard.viewcard_label.place(relwidth=1,relheight=1)
+
+class EditCard(tk.Frame):
+ def __init__(self, parent, controller):
+        tk.Frame.__init__(self,parent)
+        #Dictates the actual size of the window
+        editcard_canvas = tk.Canvas(self, height=700, width=800)
+        editcard_canvas.pack()
+        #Blue border, top of the window
+        editcard_frame = tk.Frame(self, bg='#80c1ff', bd=5)
+        editcard_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
+        self.editcard_label = tk.Label(editcard_frame, font=40, text="Would you like to Add, Modify or Delete Your Inventory ")
+        self.editcard_label.place(relwidth=.80,relheight=1)
+        self.editcard_button = tk.Button(editcard_frame, text="Main Menu", font=40, command=lambda: controller.show_frame(MainMenu))
+        self.editcard_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        editcard_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
+        editcard_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.4, anchor='n')
+        self.editcard_button1 = tk.Button(editcard_lower_frame, text='Add Cards', command=lambda: controller.show_frame(AddCard))
+        self.editcard_button1.place(relwidth=1, relheight=.30)
+        self.editcard_button2 = tk.Button(editcard_lower_frame, text='Modify Cards', command=lambda: controller.show_frame(ModCard))
+        self.editcard_button2.place(rely=.35, relwidth=1, relheight=.30)
+        self.editcard_button3 = tk.Button(editcard_lower_frame, text='Delete Cards', command=lambda: controller.show_frame(DelCard))
+        self.editcard_button3.place(rely=.70, relwidth=1, relheight=.30)
+
+class AddCard(tk.Frame):
+ def __init__(self, parent, controller):
+        tk.Frame.__init__(self,parent)
+        #Dictates the actual size of the window
+        addcard_canvas = tk.Canvas(self, height=700, width=800)
+        addcard_canvas.pack()
+        #Blue border, top of the window
+        addcard_frame = tk.Frame(self, bg='#80c1ff', bd=5)
+        addcard_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
+        self.addcard_label = tk.Label(addcard_frame, font=40, text="Add New Cards Here")
+        self.addcard_label.place(relwidth=.80,relheight=1)
+        self.addcard_button = tk.Button(addcard_frame, text="Main Menu", font=40, command=lambda: controller.show_frame(MainMenu))
+        self.addcard_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        addcard_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
+        addcard_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.50, anchor='n')
+        #Label
+        self.addcard_label_label = tk.Label(addcard_lower_frame, text ='Label')
+        self.addcard_label_label.place(relwidth=.48, relheight=.10)  
+        self.addcard_label_enrty = tk.Entry(addcard_lower_frame, font=40) 
+        self.addcard_label_enrty.place(relx= .5, relwidth=.5, relheight=.10)
+        #Card Number
+        self.addcard_card_numb_label = tk.Label(addcard_lower_frame, text ='CardNumber')
+        self.addcard_card_numb_label.place(rely=.15, relwidth=.48, relheight=.10)
+        self.addcard_card_numb_enrty = tk.Entry(addcard_lower_frame, font=40) 
+        self.addcard_card_numb_enrty.place(rely=.15,relx=.5 , relwidth=.5, relheight=.10)
+        #Card Type
+        self.addcard_cardtype_label = tk.Label(addcard_lower_frame, text='Credit Or Debit')
+        self.addcard_cardtype_label.place(rely=.30, relwidth=.48, relheight=.10)
+        self.addcard_cardtype_enrty = tk.Entry(addcard_lower_frame, font=40) 
+        self.addcard_cardtype_enrty.place(rely=.30,relx=.5 , relwidth=.5, relheight=.10)
+        #Zip Code
+        self.addcard_zip_label = tk.Label(addcard_lower_frame, text ='Zip Code')
+        self.addcard_zip_label.place(rely=.45, relwidth=.48, relheight=.10)
+        self.addcard_zip_enrty = tk.Entry(addcard_lower_frame, font=40) 
+        self.addcard_zip_enrty.place(rely=.45,relx=.5 , relwidth=.5, relheight=.10)
+        #Security Code
+        self.addcard_card_sec_label = tk.Label(addcard_lower_frame, text ='Security Code')
+        self.addcard_card_sec_label.place(rely=.60, relwidth=.48, relheight=.10) 
+        self.addcard_card_sec_enrty = tk.Entry(addcard_lower_frame, font=40) 
+        self.addcard_card_sec_enrty.place(rely=.60,relx=.5 , relwidth=.5, relheight=.10)
+        #Card Name
+        self.addcard_cardname_label = tk.Label(addcard_lower_frame, text='Name On Card')
+        self.addcard_cardname_label.place(rely=.75, relwidth=.48, relheight=.10)
+        self.addcard_cardname_enrty = tk.Entry(addcard_lower_frame, font=40) 
+        self.addcard_cardname_enrty.place(rely=.75,relx=.5 , relwidth=.5, relheight=.10)
+        #PIN
+        self.addcard_pin_entry = tk.Entry(addcard_lower_frame, font=40)
+        self.addcard_pin_entry.insert(0, 'Pin(N/A if credit)') 
+        self.addcard_pin_entry.place(rely=.90, relwidth=.48, relheight=.10)
+        #submit
+        self.addcard_submit_button = tk.Button(addcard_lower_frame, text='Submit', command=lambda: controller.addcard_sql(self.addcard_label_enrty.get(), self.addcard_card_numb_enrty.get(), self.addcard_cardtype_enrty.get(), self.addcard_zip_enrty.get(), self.addcard_card_sec_enrty.get(), self.addcard_cardname_enrty.get(), self.addcard_pin_entry.get()))
+        self.addcard_submit_button.place(rely=.90, relx=.5, relwidth=.48, relheight=.10)
+
+class ModCard(tk.Frame):
+ def __init__(self, parent, controller):
+        tk.Frame.__init__(self,parent)
+        #Dictates the actual size of the window
+        modcard_canvas = tk.Canvas(self, height=700, width=800)
+        modcard_canvas.pack()
+        #Blue border, top of the window
+        modcard_frame = tk.Frame(self, bg='#80c1ff', bd=5)
+        modcard_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
+        self.modcard_label = tk.Label(modcard_frame, font=40, text="Modify Cards Here")
+        self.modcard_label.place(relwidth=.80,relheight=1)
+        self.modcard_button = tk.Button(modcard_frame, text="Main Menu", font=40, command=lambda: controller.show_frame(MainMenu))
+        self.modcard_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        modcard_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
+        modcard_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
+        #Label
+        self.modcard_label_label = tk.Label(modcard_lower_frame, text ='Label')
+        self.modcard_label_label.place(relwidth=.48, relheight=.10)  
+        self.modcard_label_enrty = tk.Entry(modcard_lower_frame, font=40) 
+        self.modcard_label_enrty.place(relx= .5, relwidth=.5, relheight=.10)
+        #Card Number
+        self.modcard_card_numb_label = tk.Label(modcard_lower_frame, text ='CardNumber')
+        self.modcard_card_numb_label.place(rely=.15, relwidth=.48, relheight=.10)
+        self.modcard_card_numb_enrty = tk.Entry(modcard_lower_frame, font=40) 
+        self.modcard_card_numb_enrty.place(rely=.15,relx=.5 , relwidth=.5, relheight=.10)
+        #Card Type
+        self.modcard_cardtype_label = tk.Label(modcard_lower_frame, text='Credit Or Debit')
+        self.modcard_cardtype_label.place(rely=.30, relwidth=.48, relheight=.10)
+        self.modcard_cardtype_enrty = tk.Entry(modcard_lower_frame, font=40) 
+        self.modcard_cardtype_enrty.place(rely=.30,relx=.5 , relwidth=.5, relheight=.10)
+        #Zip Code
+        self.modcard_zip_label = tk.Label(modcard_lower_frame, text ='Zip Code')
+        self.modcard_zip_label.place(rely=.45, relwidth=.48, relheight=.10)
+        self.modcard_zip_enrty = tk.Entry(modcard_lower_frame, font=40) 
+        self.modcard_zip_enrty.place(rely=.45,relx=.5 , relwidth=.5, relheight=.10)
+        #Security Code
+        self.modcard_card_sec_label = tk.Label(modcard_lower_frame, text ='Security Code')
+        self.modcard_card_sec_label.place(rely=.60, relwidth=.48, relheight=.10) 
+        self.modcard_card_sec_enrty = tk.Entry(modcard_lower_frame, font=40) 
+        self.modcard_card_sec_enrty.place(rely=.60,relx=.5 , relwidth=.5, relheight=.10)
+        #Card Name
+        self.modcard_cardname_label = tk.Label(modcard_lower_frame, text='Name On Card')
+        self.modcard_cardname_label.place(rely=.75, relwidth=.48, relheight=.10)
+        self.modcard_cardname_enrty = tk.Entry(modcard_lower_frame, font=40) 
+        self.modcard_cardname_enrty.place(rely=.75,relx=.5 , relwidth=.5, relheight=.10)
+        #PIN
+        self.modcard_pin_entry = tk.Entry(modcard_lower_frame, font=40)
+        self.modcard_pin_entry.insert(0, 'N/A') 
+        self.modcard_pin_entry.place(rely=.90, relwidth=.48, relheight=.10)
+        #submit
+        self.modcard_submit_button = tk.Button(modcard_lower_frame, text='Submit', command=lambda: controller.modcard_sql(self.modcard_label_enrty.get(), self.modcard_card_numb_enrty.get(), self.modcard_cardtype_enrty.get(), self.modcard_zip_enrty.get(), self.modcard_card_sec_enrty.get(), self.modcard_cardname_enrty.get(), self.modcard_pin_entry.get()))
+        self.modcard_submit_button.place(rely=.90, relx=.5, relwidth=.48, relheight=.10)
+
+class DelCard(tk.Frame):
+ def __init__(self, parent, controller):
+        tk.Frame.__init__(self,parent)
+        #Dictates the actual size of the window
+        delcard_canvas = tk.Canvas(self, height=700, width=800)
+        delcard_canvas.pack()
+        #Blue border, top of the window
+        delcard_frame = tk.Frame(self, bg='#80c1ff', bd=5)
+        delcard_frame.place(relx=0.5, rely=0.1, relwidth=.75, relheight=0.1, anchor='n')
+        self.delcard_label = tk.Label(delcard_frame, font=40, text="Delete Cards Here")
+        self.delcard_label.place(relwidth=.80,relheight=1)
+        self.delcard_button = tk.Button(delcard_frame, text="Main Menu", font=40, command=lambda: controller.show_frame(MainMenu))
+        self.delcard_button.place(relx=0.82, relheight=1, relwidth=0.18)
+        delcard_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
+        delcard_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.25, anchor='n')
+        #Label
+        self.delcard_label_label = tk.Label(delcard_lower_frame, text ='Enter Label Identifier')
+        self.delcard_label_label.place(relwidth=.48, relheight=.20)
+        self.delcard_label_enrty = tk.Entry(delcard_lower_frame, font=40) 
+        self.delcard_label_enrty.place(relx= .5, relwidth=.5, relheight=.20)
+        #submit
+        self.delcard_pokemon_button = tk.Button(delcard_lower_frame, text='Submit', command=lambda: controller.delcard_sql(self.delcard_label_enrty.get()))
+        self.delcard_pokemon_button.place(rely=.25, relx=.5, relwidth=.48, relheight=.20)       
         
 app = PassSafe()
 app.mainloop()
@@ -453,4 +687,5 @@ app.mainloop()
 #https://www.youtube.com/watch?v=YXPyB4XeYLA&t=14975s
 #https://github.com/flatplanet/Intro-To-TKinter-Youtube-Course/blob/master/database2.py
 #https://charlesleifer.com/blog/encrypted-sqlite-databases-with-python-and-sqlcipher/
-#TODO: Pokemon/Payment Cards
+#https://stackoverflow.com/questions/22812134/how-to-clear-an-entire-treeview-with-tkinter#comment82282737_27068344
+#https://www.activestate.com/resources/quick-reads/how-to-display-data-in-a-table-using-tkinter/
