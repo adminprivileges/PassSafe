@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 import time, sqlite3, os, string, random, pyodbc, random
 import base64
+from PIL import ImageTk, Image
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
@@ -35,7 +36,7 @@ class PassSafe(tk.Tk):
     def database_open(self, dblogic):
         self.conn = None
         try:
-            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=172.31.41.34; DATABASE=Passsafe; UID=SA; PWD=Databaseproject11;")
             self.cursor = self.conn.cursor()         
             self.cursor.execute(dblogic)
         except sqlite3.Error as e:
@@ -73,7 +74,7 @@ class PassSafe(tk.Tk):
     #Authenticaton function
     #TODO: hash password entry, match against password, then ass showframe function to loginbutton 
     def login_funct(self, username, password, label):
-        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=172.31.41.34; DATABASE=Passsafe; UID=SA; PWD=Databaseproject11;")
         logg = login_conn.cursor()
         logg_logic= f'''SELECT hash, salt2 FROM auth_user WHERE username = \'{username}\''''
         key_1 = logg.execute(logg_logic)
@@ -98,7 +99,7 @@ class PassSafe(tk.Tk):
     def mainmenu_edits(self, username):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
     def viewpass_edits(self, username):
-        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=172.31.41.34; DATABASE=Passsafe; UID=SA; PWD=Databaseproject11;")
         cursor = conn.cursor()
         cursor.execute(f" SELECT label,username,password from passwords WHERE auth_username=\'{username}\'")
         rows = cursor.fetchall()    
@@ -107,7 +108,7 @@ class PassSafe(tk.Tk):
             ViewPass.tree.insert("", tk.END, values=row) 
         conn.close()
     def viewcard_edits(self, username):
-        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=172.31.41.34; DATABASE=Passsafe; UID=SA; PWD=Databaseproject11;")
         cursor = conn.cursor()
         cursor.execute(f"""
         SELECT payment_cards.label,payment_cards.card_number,payment_cards.card_type,payment_cards.zip_code,payment_cards.sec_code,payment_cards.card_name, debit_cards.pin
@@ -121,7 +122,7 @@ class PassSafe(tk.Tk):
         conn.close()
     def poke_generate(self, label, username):
         conn = pyodbc.connect(
-        f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;"
+        f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=172.31.41.34; DATABASE=Passsafe; UID=SA; PWD=Databaseproject11;"
         )
         cursor = conn.cursor() 
         while True:
@@ -146,7 +147,8 @@ class PassSafe(tk.Tk):
     def addcard_sql(self,label,card_number,card_type,zip_code,sec_code,card_name,pin):
         dblogic = f"INSERT INTO payment_cards(label,card_number,card_type,zip_code,sec_code,card_name,auth_username) VALUES(\'{label}\',\'{card_number}\',\'{card_type}\',\'{zip_code}\',\'{sec_code}\',\'{card_name}\',\'{user_auth_global}\')"
         self.database_open(dblogic)
-        if card_type.lower() == "debit":
+        card_type = card_type.lower()
+        if card_type == "debit":
             dblogic1 = f"INSERT into debit_cards(debit_label, debit_username, pin) VALUES(\'{label}\', \'{user_auth_global}\', \'{pin}\') "
             self.database_open(dblogic1)
         else:
@@ -158,7 +160,8 @@ class PassSafe(tk.Tk):
     def modcard_sql(self, label,card_number,card_type,zip_code,sec_code,card_name,pin):
         dblogic = f"UPDATE payment cards set card_number= \'{card_number}\',card_type = \'{card_type}\',zip_code = \'{zip_code}\',sec_code = \'{sec_code}\',card_name= \'{card_name}\' WHERE label = \'{label}\' AND auth_username=\'{user_auth_global}\'"
         self.database_open(dblogic)
-        if card_type.lower() == "debit":
+        card_type = card_type.lower()
+        if card_type == "debit":
             dblogic1 = f"UPDATE debit_cards set pin = \'{pin}\' WHERE debit_label = \'{label}, \' AND debit_username = \'{user_auth_global}\'" 
             self.database_open(dblogic1)
     def delpass_sql(self, label):
@@ -171,7 +174,7 @@ class PassSafe(tk.Tk):
     def create_user(self, username, password, label):
         self.password = password
         #TODO: Make Table in Cred Database
-        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=######;")
+        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=172.31.41.34; DATABASE=Passsafe; UID=SA; PWD=Databaseproject11;")
         auth = auth_conn.cursor()
         #Queries the database to see if the user already has a table
         #TODO: Since im using an auth database i need to change this to not query for a table with that name but query the authdb for the name in the primary key field
@@ -286,9 +289,9 @@ class StartPage(tk.Frame):
         self.startpage_label = tk.Label(startpage_lower_frame, text='PassSafe Password Manager')
         self.startpage_label.place(relwidth=1, relheight=.2)
         #TODO: Figure out why the hell my image isnt showing anymore
-        background_image = tk.PhotoImage(file='safe_icon.png')
-        background_image = background_image.subsample(2, 2)
-        background_image_label = tk.Label(startpage_lower_frame, image=background_image) 
+        #background_image = tk.PhotoImage(file='safe_icon.png')
+        #background_image = background_image.subsample(2, 2)
+        background_image_label = tk.Label(startpage_lower_frame) #, image=background_image) 
         background_image_label.place(rely=.2, relwidth=1, relheight=.8)
 
 class CreateUser(tk.Frame):
@@ -510,7 +513,7 @@ class ViewCard(tk.Frame):
         self.viewcard_button.place(relx=0.82, relheight=1, relwidth=0.18)
         viewcard_lower_frame = tk.Frame(self, bg='#80c1ff', bd=10)
         viewcard_lower_frame.place(relx=0.5, rely=0.25, relwidth=0.75, relheight=0.5, anchor='n')
-        ViewCard.tree = ttk.Treeview(viewcard_lower_frame, column=("c1", "c2", "c3", "c4", "c5", "c6", "c7"), show='headings')
+        ViewCard.tree = ttk.Treeview(viewcard_lower_frame, column=("c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8"), show='headings')
         ViewCard.tree.column("#1", anchor=tk.CENTER)
         ViewCard.tree.heading("#1", text="Label")
         ViewCard.tree.column("#2", anchor=tk.CENTER)
@@ -522,9 +525,11 @@ class ViewCard(tk.Frame):
         ViewCard.tree.column("#5", anchor=tk.CENTER)
         ViewCard.tree.heading("#5", text="Sec Code")
         ViewCard.tree.column("#6", anchor=tk.CENTER)
-        ViewCard.tree.heading("#6", text="Card Name")
+        ViewCard.tree.heading("#6", text="First Name")
         ViewCard.tree.column("#7", anchor=tk.CENTER)
-        ViewCard.tree.heading("#7", text="PIN")
+        ViewCard.tree.heading("#7", text="Last Name")
+        ViewCard.tree.column("#8", anchor=tk.CENTER)
+        ViewCard.tree.heading("#8", text="PIN")
         ViewCard.tree.pack()
         #ViewCard.viewcard_label = tk.Label(viewcard_lower_frame, font=40, anchor="nw")
         #ViewCard.viewcard_label.place(relwidth=1,relheight=1)
