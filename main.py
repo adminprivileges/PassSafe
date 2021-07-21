@@ -35,7 +35,7 @@ class PassSafe(tk.Tk):
     def database_open(self, dblogic):
         self.conn = None
         try:
-            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=ARMv1998yo;")
+            self.conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=#######;")
             self.cursor = self.conn.cursor()         
             self.cursor.execute(dblogic)
         except sqlite3.Error as e:
@@ -73,7 +73,7 @@ class PassSafe(tk.Tk):
     #Authenticaton function
     #TODO: hash password entry, match against password, then ass showframe function to loginbutton 
     def login_funct(self, username, password, label):
-        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=ARMv1998yo;")
+        login_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=#######;")
         logg = login_conn.cursor()
         logg_logic= f'''SELECT hash, salt2 FROM auth_user WHERE username = \'{username}\''''
         key_1 = logg.execute(logg_logic)
@@ -98,7 +98,7 @@ class PassSafe(tk.Tk):
     def mainmenu_edits(self, username):
         MainMenu.mainmenu_label['text'] = f"Welcome to PassSafe {username}, please choose an option"
     def viewpass_edits(self, username):
-        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=ARMv1998yo;")
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=#######;")
         cursor = conn.cursor()
         cursor.execute(f" SELECT label,username,password from passwords WHERE auth_username=\'{username}\'")
         rows = cursor.fetchall()    
@@ -107,7 +107,7 @@ class PassSafe(tk.Tk):
             ViewPass.tree.insert("", tk.END, values=row) 
         conn.close()
     def viewcard_edits(self, username):
-        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=ARMv1998yo;")
+        conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=#######;")
         cursor = conn.cursor()
         cursor.execute(f"""
         SELECT payment_cards.label,payment_cards.card_number,payment_cards.card_type,payment_cards.zip_code,payment_cards.sec_code,payment_cards.card_name, debit_cards.pin
@@ -121,7 +121,7 @@ class PassSafe(tk.Tk):
         conn.close()
     def poke_generate(self, label, username):
         conn = pyodbc.connect(
-        f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=ARMv1998yo;"
+        f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=##########;"
         )
         cursor = conn.cursor() 
         while True:
@@ -171,7 +171,7 @@ class PassSafe(tk.Tk):
     def create_user(self, username, password, label):
         self.password = password
         #TODO: Make Table in Cred Database
-        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=ARMv1998yo;")
+        auth_conn = pyodbc.connect(f"DRIVER=ODBC Driver 17 for SQL Server; SERVER=192.168.4.145; DATABASE=Passsafe; UID=SA; PWD=#########;")
         auth = auth_conn.cursor()
         #Queries the database to see if the user already has a table
         #TODO: Since im using an auth database i need to change this to not query for a table with that name but query the authdb for the name in the primary key field
