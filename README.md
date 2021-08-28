@@ -7,5 +7,3 @@ This was just an app for a class, I wanted to do a lot more with it, but it exce
 - I also need to add functionality that notifies the user upon successful queries
 - Data needs to be cleaned of commas, quotes, and parentheses   
 - The application connection string would need to be changed in order to connect to a new database 
-- I created logic to log specifically to login without querying the database, just enter the username: hoda and password: maleki
-
